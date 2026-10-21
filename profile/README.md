@@ -10,6 +10,7 @@ Welcome to the frozen wastes of the Outer Rim. **hothsys** is an open-source dev
 *   **[DocuCloak](https://github.com/hothsys/docucloak)**
 *   **[Frayme](https://github.com/hothsys/frayme)**
 *   **[Foto Nerve Shatter](https://github.com/hothsys/fotonervic)**
+*   **[Sweepr](https://github.com/hothsys/sweepr)**
 
 ---
 
