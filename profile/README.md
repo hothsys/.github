@@ -7,6 +7,7 @@ Welcome to the frozen wastes of the Outer Rim. **hothsys** is an open-source dev
 ## 🛠️ Main Battle Stations (Core Projects)
 
 *   **[Matrix](https://github.com/hothsys/matrix)**
+*   **[Delta](https://github.com/hothsys/delta)**
 *   **[DocuCloak](https://github.com/hothsys/docucloak)**
 *   **[Frayme](https://github.com/hothsys/frayme)**
 *   **[Foto Nerve Shatter](https://github.com/hothsys/fotonervic)**
