@@ -20,6 +20,7 @@ Welcome to the frozen wastes of the Outer Rim. **hothsys** is an open-source dev
 
 *   **Organization Mainframe:** [github.com/hothsys](https://github.com/hothsys)
 *   **Status:** *The shield doors are closed. Systems fully operational.*
+*   **Tactical Operations:** [Development Workflow](../DEVELOPMENT.md) for branch naming, issues, and PR conventions.
 
 ---
 <p align="center">
