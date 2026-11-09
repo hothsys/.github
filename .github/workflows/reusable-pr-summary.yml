@@ -1,0 +1,223 @@
+name: PR Summary (reusable)
+# Shared AI PR summary for every repo in the org. Lives in <org>/.github at
+# .github/workflows/reusable-pr-summary.yml; each repo calls it from a small
+# pr-summary.yml
+#
+# Callers use pull_request (not pull_request_target) so GitHub itself withholds
+# secrets and write access from fork PRs. Dependabot runs read secrets from the
+# Dependabot store, so OPENROUTER_API_KEY must be set there as well as under
+# Actions (org-level secrets work for both).
+#
+# This workflow sees the caller's event and repository, so the script below
+# summarizes the PR in the calling repo.
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: 'OpenRouter model ID; overrides the OPENROUTER_MODEL variable'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      OPENROUTER_API_KEY:
+        required: true
+jobs:
+  summary:
+    # Skip fork PRs: they get no secrets and a read-only token, so the run
+    # would only fail. Summarize them by hand through workflow_dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Generate PR Summary
+        # Pinned to a commit (v9.0.0) because this job can read secrets
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Model: the caller's `model` input, else the OPENROUTER_MODEL
+          # configuration variable (Settings > Secrets and variables > Actions >
+          # Variables), else the auto router, which picks a model per request
+          OPENROUTER_MODEL: ${{ inputs.model || vars.OPENROUTER_MODEL || 'openrouter/auto' }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            let prNumber;
+            if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.payload.inputs && context.payload.inputs.pr_number) {
+              prNumber = parseInt(context.payload.inputs.pr_number, 10);
+            }
+
+            if (!prNumber || isNaN(prNumber)) {
+              throw new Error("Could not determine a valid Pull Request number!");
+            }
+
+            core.info(`Summarizing ${owner}/${repo}#${prNumber} (event: ${context.eventName}, actor: ${context.actor})`);
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner, repo, pull_number: prNumber, per_page: 100,
+            });
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner, repo, pull_number: prNumber, per_page: 100,
+            });
+
+            const skipDirs = ['.github/', '.circleci/', '.gitlab/'];
+            const appFiles = files.filter(f => !skipDirs.some(d => f.filename.startsWith(d)));
+            const diffParts = (appFiles.length ? appFiles : files).slice(0, 12).map(f => {
+              const patch = (f.patch || '').slice(0, 1500);
+              return `--- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})\n${patch}`;
+            });
+            const diffContext = diffParts.join('\n\n');
+            const commitList = commits
+              .map(c => c.commit.message.split('\n')[0].trim())
+              .filter(m => m && !m.startsWith('Merge'))
+              .join('\n');
+
+            core.info(`PR by ${pr.user.login}: ${pr.changed_files} files changed, ${commits.length} commits`);
+            core.info(`Prompt input: ${diffParts.length} file diffs, ${diffContext.length} characters`);
+
+            const requestedModel = process.env.OPENROUTER_MODEL;
+            const run = { requestedModel, usedModel: null, provider: null, status: null, attempts: 0 };
+            core.info(`Requested model: ${requestedModel}`);
+
+            let aiSummary = '';
+            try {
+              const targetEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+
+              const headers = {
+                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://github.com',
+                'X-Title': 'GitHub PR Summarizer'
+              };
+              const baseRequest = {
+                  model: requestedModel,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a senior software engineer summarizing a pull request for the team. Write 2-4 sentences describing what this PR changes from the USER\'S perspective: what they will see or experience differently. Lead with the most important behavioral change, not implementation details. Do not describe internal mechanisms (caching, classes, event handlers) unless they ARE the feature. Do not use markdown headers or bullet points. Write in third person ("This PR adds..." not "I added..."). Be specific: name the features and UI elements affected. Never end with filler like "aims to improve," "enhances the experience," "improves usability," or any sentence that could apply to any PR. After stating the facts, stop.'
+                    },
+                    { role: 'user', content: `PR Title: ${pr.title}\n\nCommit messages:\n${commitList}\n\nDiff:\n${diffContext}` }
+                  ],
+                  temperature: 0.2,
+                  // max_tokens covers reasoning AND the visible answer; if a reasoning
+                  // model spends it all thinking, content comes back empty. You're
+                  // billed for tokens used, not this cap, so leave generous headroom.
+                  max_tokens: 2000,
+                  // Ask OpenRouter to report the cost of this request in `usage`.
+                  usage: { include: true },
+              };
+
+              // The auto router may pick a model whose reasoning can't be disabled
+              // (effort 'none' -> HTTP 400) or one that rejects reasoning settings,
+              // so ask for low effort and, on a reasoning-related 400, retry without
+              // the setting. Models without reasoning ignore it.
+              let aiResp, rawBody;
+              for (const extra of [{ reasoning: { effort: 'low' } }, {}]) {
+                run.attempts += 1;
+                const started = Date.now();
+                aiResp = await fetch(targetEndpoint, {
+                  method: 'POST', headers, body: JSON.stringify({ ...baseRequest, ...extra }),
+                });
+                rawBody = await aiResp.text();
+                run.status = aiResp.status;
+                core.info(`OpenRouter attempt ${run.attempts} (${extra.reasoning ? 'reasoning effort low' : 'no reasoning setting'}): HTTP ${aiResp.status} in ${Date.now() - started} ms`);
+                if (!(aiResp.status === 400 && /reasoning/i.test(rawBody) && extra.reasoning)) break;
+                core.info('Model rejected the reasoning setting; retrying without it.');
+              }
+
+              if (aiResp.ok) {
+                const aiData = JSON.parse(rawBody);
+                const choice = aiData.choices?.[0];
+                aiSummary = (choice?.message?.content || '').trim();
+                const usage = aiData.usage || {};
+                run.usedModel = aiData.model || null;
+                run.provider = aiData.provider || null;
+                run.finishReason = choice?.finish_reason ?? null;
+                run.promptTokens = usage.prompt_tokens ?? null;
+                run.completionTokens = usage.completion_tokens ?? null;
+                run.reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? 0;
+                run.cost = usage.cost ?? null;
+                run.generationId = aiData.id || null;
+
+                core.info(`Model used: ${run.usedModel}${run.provider ? ` via ${run.provider}` : ''}`);
+                core.info(`Finish reason: ${run.finishReason}; tokens: prompt ${run.promptTokens}, completion ${run.completionTokens} (reasoning ${run.reasoningTokens})`);
+                if (run.cost !== null) core.info(`Cost: $${run.cost}`);
+                if (run.generationId) core.info(`OpenRouter generation ID: ${run.generationId}`);
+                if (!aiSummary) {
+                  core.warning(`AI summary was empty (finish_reason ${run.finishReason}).` +
+                    (aiData.error ? ` ${JSON.stringify(aiData.error)}` : ''));
+                }
+              } else {
+                core.warning(`AI summary failed with HTTP ${aiResp.status}: ${rawBody.slice(0, 1000)}`);
+              }
+            } catch (e) {
+              core.warning(`AI summary JavaScript error: ${e.stack || e.message}`);
+            }
+
+            // The title and AI text come from untrusted PR content; break
+            // @mentions so a crafted PR can't make the bot ping people.
+            const noPing = s => s.replace(/@(?=[\w-])/g, '@\u200b');
+
+            const auto = requestedModel === 'openrouter/auto';
+            const footer = aiSummary && run.usedModel
+              ? `<sub>Generated by \`${run.usedModel}\`${auto ? ' (chosen by `openrouter/auto`)' : ''}</sub>`
+              : null;
+
+            // A marker so later pushes update this comment instead of adding another.
+            const marker = '<!-- pr-summary -->';
+            const summary = [
+              marker,
+              '## 📋 PR Summary',
+              '',
+              `**Title:** ${noPing(pr.title)}`,
+              '',
+              `**${pr.changed_files}** files changed: **+${pr.additions}** additions, **-${pr.deletions}** deletions`,
+              '',
+              aiSummary ? `### Description\n${noPing(aiSummary)}` : null,
+              footer ? `\n${footer}` : null,
+            ].filter(v => v !== null).join('\n');
+
+            // Only reuse comments this workflow wrote; the token can't edit anyone else's.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const previous = comments.find(c =>
+              c.user && c.user.login === 'github-actions[bot]' && c.body && c.body.startsWith(marker));
+
+            let comment;
+            if (previous) {
+              ({ data: comment } = await github.rest.issues.updateComment({
+                owner, repo, comment_id: previous.id, body: summary,
+              }));
+              core.info(`Updated existing summary comment: ${comment.html_url}`);
+            } else {
+              ({ data: comment } = await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body: summary,
+              }));
+              core.info(`Posted summary comment: ${comment.html_url}`);
+            }
+
+            // Run page summary, so the details are visible without opening the log.
+            await core.summary
+              .addHeading(`PR summary for #${prNumber}`, 3)
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['Requested model', run.requestedModel],
+                ['Model used', run.usedModel || 'none (no AI summary)'],
+                ['Provider', run.provider || 'unknown'],
+                ['HTTP status', String(run.status ?? 'no response')],
+                ['Attempts', String(run.attempts)],
+                ['Finish reason', String(run.finishReason ?? 'n/a')],
+                ['Tokens (prompt / completion / reasoning)',
+                  `${run.promptTokens ?? '?'} / ${run.completionTokens ?? '?'} / ${run.reasoningTokens ?? '?'}`],
+                ['Cost (USD)', run.cost !== null && run.cost !== undefined ? String(run.cost) : 'not reported'],
+                ['Comment', previous ? 'updated' : 'created'],
+              ])
+              .addLink('View comment', comment.html_url)
+              .write();
