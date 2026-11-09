@@ -177,7 +177,7 @@ jobs:
               '',
               `**Title:** ${noPing(pr.title)}`,
               '',
-              `**${pr.changed_files}** files changed: **+${pr.additions}** additions, **-${pr.deletions}** deletions`,
+              `**${pr.changed_files}** files changed`,
               '',
               aiSummary ? `### Description\n${noPing(aiSummary)}` : null,
               footer ? `\n${footer}` : null,
