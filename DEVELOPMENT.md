@@ -33,3 +33,35 @@ To close an issue automatically upon merging a pull request, you **must** includ
   Closes #14
   Closes #15
   ```
+
+### 🧹 5. Linting & Formatting
+
+All repos run the org's shared lint workflow on every PR. It auto-detects the stack and runs:
+
+* **Python** - [Ruff](https://docs.astral.sh/ruff/) (`ruff check` + `ruff format --check`)
+* **JavaScript / TypeScript** - [Biome](https://biomejs.dev/) (`biome ci`)
+* **Java** - [Spotless](https://github.com/diffplug/spotless) with google-java-format (activates when a `pom.xml` or Gradle build exists)
+
+**Adding it to a repo** takes one workflow file at `.github/workflows/lint.yml`:
+
+```yaml
+name: Lint
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  lint:
+    uses: hothsys/.github/.github/workflows/reusable-lint.yml@v2
+    permissions:
+      contents: read
+```
+
+Plus a repo-root copy of the matching config from this repo: `configs/ruff.toml`, `configs/biome.json`, or both. Local copies keep your editor and CI on the same rules; refresh them when the org configs change. Per-repo overrides (e.g. an older Ruff `target-version`) belong in the repo's copy.
+
+Multi-stack repos need nothing extra: the workflow runs each linter on the matching files, so a JS frontend and a Python backend are both checked in one PR.
+
+**Dependabot:** settings live in `configs/dependabot.template.yml` here. `sync-dependabot.yml` renders each repo's `.github/dependabot.yml` filtered to the ecosystems that repo actually uses, and opens a PR when a repo drifts. Do not hand-edit a repo's dependabot.yml - edit the template.
+
+**README:** new repos start from `docs/README-template.md` (Description, Features, Documentation in `docs/`, License).
