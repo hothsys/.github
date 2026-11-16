@@ -56,7 +56,20 @@ def render(template: str, keep: set) -> str:
         name = block[0].split('"')[1]
         if name in keep:
             kept.extend(block)
-    return "\n".join(head + kept) + "\n" if kept else ""
+    if not kept:
+        return ""
+    # Replace the template's header comment with a generated-file notice.
+    body = [line for line in head if not line.startswith("#")]
+    while body and not body[0].strip():
+        body.pop(0)
+    header = [
+        "# GENERATED from hothsys/.github configs/dependabot.template.yml.",
+        "# Do not edit here - edit the template; the org sync workflow opens a",
+        "# PR with the change. Only ecosystems with manifests in this repo are",
+        "# listed.",
+        "",
+    ]
+    return "\n".join(header + body + kept) + "\n"
 
 
 def main() -> None:
