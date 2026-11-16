@@ -1,0 +1,55 @@
+name: Sync Dependabot configs
+# Renders each hothsys repo's .github/dependabot.yml from
+# configs/dependabot.template.yml (keeping only ecosystems whose manifests
+# exist in that repo) and opens a PR when a repo drifts.
+#
+# Cross-repo pushes need a fine-grained PAT stored as the org secret
+# DEPENDABOT_SYNC_PAT (Contents: write, Pull requests: write on all repos).
+# Until that secret exists the workflow exits cleanly and does nothing.
+on:
+  push:
+    branches: [main]
+    paths: [configs/dependabot.template.yml]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    if: vars.DEPENDABOT_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync every repo
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_SYNC_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repos=$(gh repo list hothsys --limit 100 --json name --jq '.[].name')
+          for repo in $repos; do
+            [ "$repo" = ".github" ] && continue
+            work=$(mktemp -d)
+            git clone -q --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/hothsys/${repo}.git" "$work"
+            mkdir -p "$work/.github"
+            rendered="$work/.github/dependabot.yml"
+            if python3 scripts/render-dependabot.py configs/dependabot.template.yml "$work" > "$rendered.new" && [ -s "$rendered.new" ]; then
+              if ! cmp -s "$rendered" "$rendered.new" 2>/dev/null; then
+                mv "$rendered.new" "$rendered"
+                cd "$work"
+                git config user.name "hothsys-bot"; git config user.email "bot@hothsys.local"
+                git checkout -q -b "chore/dependabot-sync"
+                git add .github/dependabot.yml
+                git commit -q -m "chore: sync dependabot config from org template"
+                git push -q -f origin "chore/dependabot-sync"
+                gh pr create --repo "hothsys/${repo}" --base main --head "chore/dependabot-sync" \
+                  --title "chore: sync dependabot config from org template" \
+                  --body "Regenerated from [configs/dependabot.template.yml](https://github.com/hothsys/.github/blob/main/configs/dependabot.template.yml), filtered to the ecosystems present in this repo." \
+                  || echo "PR already exists for $repo"
+                cd - >/dev/null
+              fi
+            else
+              echo "No applicable ecosystems in $repo; skipping"
+            fi
+            rm -rf "$work"
+          done
