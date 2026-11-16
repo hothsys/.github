@@ -1,0 +1,84 @@
+name: Lint (reusable)
+# Shared lint for every hothsys repo. Detects Python (Ruff), JS/TS (Biome)
+# and Java (Spotless) and runs each on the matching files. Callers use the
+# thin lint.yml shown in DEVELOPMENT.md; configs are the repo-local copies of
+# configs/ruff.toml and configs/biome.json from this repo.
+on:
+  workflow_call:
+    inputs:
+      python_paths:
+        description: 'Paths to lint with Ruff (default: whole repo when .py files exist)'
+        type: string
+        default: ''
+      js_paths:
+        description: 'Paths to lint with Biome (default: whole repo when JS/TS files exist)'
+        type: string
+        default: ''
+      java_paths:
+        description: 'Paths to Maven/Gradle projects to check with Spotless'
+        type: string
+        default: ''
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      python: ${{ steps.scan.outputs.python }}
+      js: ${{ steps.scan.outputs.js }}
+      java: ${{ steps.scan.outputs.java }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: scan
+        shell: bash
+        run: |
+          py="${{ inputs.python_paths }}";  [ -z "$py" ] && { find . -path ./.git -prune -o -name '*.py' -print -quit | grep -q . && py='.'; }
+          js="${{ inputs.js_paths }}";      [ -z "$js" ] && { find . -path ./.git -prune -o \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' -o -name '*.mjs' \) -print -quit | grep -q . && js='.'; }
+          jv="${{ inputs.java_paths }}";    [ -z "$jv" ] && { find . -path ./.git -prune -o \( -name 'pom.xml' -o -name 'build.gradle*' \) -print -quit | grep -q . && jv='.'; }
+          { echo "python=$py"; echo "js=$js"; echo "java=$jv"; } >> "$GITHUB_OUTPUT"
+
+  ruff:
+    needs: detect
+    if: needs.detect.outputs.python != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+      - run: ruff check --output-format=github ${{ needs.detect.outputs.python }}
+      - run: ruff format --check ${{ needs.detect.outputs.python }}
+
+  biome:
+    needs: detect
+    if: needs.detect.outputs.js != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+      - run: biome ci ${{ needs.detect.outputs.js }}
+
+  java:
+    needs: detect
+    if: needs.detect.outputs.java != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Spotless check (Maven or Gradle, per module)
+        shell: bash
+        run: |
+          for dir in ${{ needs.detect.outputs.java }}; do
+            if [ -f "$dir/pom.xml" ]; then (cd "$dir" && mvn -q spotless:check);
+            elif [ -f "$dir/gradlew" ]; then (cd "$dir" && ./gradlew spotlessCheck); fi
+          done
