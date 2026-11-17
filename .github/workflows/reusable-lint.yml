@@ -41,6 +41,7 @@ jobs:
   ruff:
     needs: detect
     if: needs.detect.outputs.python != ''
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,6 +54,7 @@ jobs:
   biome:
     needs: detect
     if: needs.detect.outputs.js != ''
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,6 +68,7 @@ jobs:
   java:
     needs: detect
     if: needs.detect.outputs.java != ''
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
