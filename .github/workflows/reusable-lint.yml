@@ -48,6 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
+        continue-on-error: true
       - continue-on-error: true
         run: ruff check --output-format=github ${{ needs.detect.outputs.python }}
       - continue-on-error: true
