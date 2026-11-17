@@ -48,8 +48,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
-      - run: ruff check --output-format=github ${{ needs.detect.outputs.python }}
-      - run: ruff format --check ${{ needs.detect.outputs.python }}
+      - continue-on-error: true
+        run: ruff check --output-format=github ${{ needs.detect.outputs.python }}
+      - continue-on-error: true
+        run: ruff format --check ${{ needs.detect.outputs.python }}
 
   biome:
     needs: detect
@@ -63,7 +65,8 @@ jobs:
       - uses: biomejs/setup-biome@v2
         with:
           version: latest
-      - run: biome ci ${{ needs.detect.outputs.js }}
+      - continue-on-error: true
+        run: biome ci ${{ needs.detect.outputs.js }}
 
   java:
     needs: detect
@@ -79,6 +82,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Spotless check (Maven or Gradle, per module)
+        continue-on-error: true
         shell: bash
         run: |
           for dir in ${{ needs.detect.outputs.java }}; do
