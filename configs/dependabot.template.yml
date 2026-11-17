@@ -1,0 +1,33 @@
+# Canonical Dependabot settings for hothsys. DO NOT copy this file as-is:
+# .github/workflows/sync-dependabot.yml renders each repo's
+# .github/dependabot.yml from this template, keeping only the ecosystems
+# whose manifest files exist in that repo. Edit settings here; the sync
+# workflow opens PRs to roll the change out.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    assignees:
+      - "hgosalia"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    assignees:
+      - "hgosalia"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
