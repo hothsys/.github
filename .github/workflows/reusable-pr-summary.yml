@@ -117,18 +117,48 @@ jobs:
               // (effort 'none' -> HTTP 400) or one that rejects reasoning settings,
               // so ask for low effort and, on a reasoning-related 400, retry without
               // the setting. Models without reasoning ignore it.
-              let aiResp, rawBody;
-              for (const extra of [{ reasoning: { effort: 'low' } }, {}]) {
+              const post = async (body, label) => {
                 run.attempts += 1;
                 const started = Date.now();
-                aiResp = await fetch(targetEndpoint, {
-                  method: 'POST', headers, body: JSON.stringify({ ...baseRequest, ...extra }),
+                const resp = await fetch(targetEndpoint, {
+                  method: 'POST', headers, body: JSON.stringify(body),
                 });
-                rawBody = await aiResp.text();
-                run.status = aiResp.status;
-                core.info(`OpenRouter attempt ${run.attempts} (${extra.reasoning ? 'reasoning effort low' : 'no reasoning setting'}): HTTP ${aiResp.status} in ${Date.now() - started} ms`);
+                const text = await resp.text();
+                run.status = resp.status;
+                core.info(`OpenRouter attempt ${run.attempts} (${label}): HTTP ${resp.status} in ${Date.now() - started} ms`);
+                return { resp, text };
+              };
+
+              let aiResp, rawBody;
+              for (const extra of [{ reasoning: { effort: 'low' } }, {}]) {
+                ({ resp: aiResp, text: rawBody } = await post(
+                  { ...baseRequest, ...extra },
+                  extra.reasoning ? 'reasoning effort low' : 'no reasoning setting'
+                ));
                 if (!(aiResp.status === 400 && /reasoning/i.test(rawBody) && extra.reasoning)) break;
                 core.info('Model rejected the reasoning setting; retrying without it.');
+              }
+
+              // HTTP 402 means the OpenRouter balance can't cover the request.
+              // Two observed flavors: a hard cap whose body reports how many
+              // tokens it can afford (retry once with a fitting max_tokens, so a
+              // low balance still yields a shorter description), and a transient
+              // in-flight budget cap from parallel runs (retry once after a wait).
+              if (aiResp.status === 402) {
+                const affordable = parseInt((rawBody.match(/can only afford (\d+)/) || [])[1] || '0', 10);
+                const budget = Math.min(affordable - 64, 1000);
+                if (budget >= 200) {
+                  ({ resp: aiResp, text: rawBody } = await post(
+                    { ...baseRequest, max_tokens: budget },
+                    `max_tokens ${budget} to fit the remaining balance`
+                  ));
+                } else if (/in-flight/i.test(rawBody)) {
+                  core.info('In-flight budget exhausted; waiting 20s before one retry.');
+                  await new Promise(r => setTimeout(r, 20000));
+                  ({ resp: aiResp, text: rawBody } = await post(baseRequest, 'after 20s wait'));
+                } else {
+                  core.info(`Balance covers ~${affordable} tokens; too little for a useful summary, not retrying.`);
+                }
               }
 
               if (aiResp.ok) {
@@ -179,7 +209,9 @@ jobs:
               '',
               `**${pr.changed_files}** files changed`,
               '',
-              aiSummary ? `### Description\n${noPing(aiSummary)}` : null,
+              aiSummary
+                ? `### Description\n${noPing(aiSummary)}`
+                : `_AI description unavailable: OpenRouter returned HTTP ${run.status ?? 'no response'}. See the workflow run's annotations for the reason._`,
               footer ? `\n${footer}` : null,
             ].filter(v => v !== null).join('\n');
 
