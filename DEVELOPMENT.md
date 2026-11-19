@@ -62,6 +62,4 @@ Plus a repo-root copy of the matching config from this repo: `configs/ruff.toml`
 
 Multi-stack repos need nothing extra: the workflow runs each linter on the matching files, so a JS frontend and a Python backend are both checked in one PR.
 
-**Dependabot:** settings live in `configs/dependabot.template.yml` here. `sync-dependabot.yml` renders each repo's `.github/dependabot.yml` filtered to the ecosystems that repo actually uses, and opens a PR when a repo drifts. Do not hand-edit a repo's dependabot.yml - edit the template.
-
-**README:** new repos start from `docs/README-template.md` (Description, Features, Documentation in `docs/`, License).
+**Dependabot:** settings live in `configs/dependabot.template.yml` here. `sync-dependabot.yml` renders each repo's `.github/dependabot.yml` filtered to the ecosystems that repo actually uses, and opens a PR when a repo drifts. Do not hand-edit a repo's dependabot.yml - edit the template. Manifest ecosystems (pip, npm, maven, gradle) check daily so advisories become fix PRs within a day; `github-actions` checks weekly. Dependabot alerts and security updates are enabled per repo under Settings > Code security and analysis, so known-CVE PRs also fire between version-update runs.
