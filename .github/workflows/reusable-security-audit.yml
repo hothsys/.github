@@ -1,0 +1,90 @@
+name: Security audit (reusable)
+# Shared daily CVE audit for every hothsys repo. Runs Google's osv-scanner
+# (OSV.dev database: PyPI, npm, Maven Central, Go, GitHub Actions, ...) over
+# every dependency manifest and lockfile in the repo. On findings it opens
+# (or updates) one marker issue with the report and fails the run so it is
+# visible; when the repo comes back clean it closes that issue.
+#
+# Callers use the thin security-audit.yml shown in DEVELOPMENT.md, pinned
+# to the floating @v2 tag like the lint caller.
+on:
+  workflow_call:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install osv-scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="2.7.1"
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${VERSION}/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          /tmp/osv-scanner --version
+
+      - name: Scan for known vulnerabilities
+        id: scan
+        shell: bash
+        run: |
+          set +e
+          /tmp/osv-scanner scan --recursive --format markdown --output /tmp/osv-report.md . > /tmp/osv-log.txt 2>&1
+          code=$?
+          cat /tmp/osv-log.txt
+          # osv-scanner exits 1 when vulnerabilities are found; anything
+          # else above 1 is a scanner error and should fail the job.
+          if [ "$code" -gt 1 ]; then
+            echo "::error::osv-scanner failed with exit code $code"
+            exit "$code"
+          fi
+          echo "found=$([ "$code" -eq 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Report findings as an issue
+        if: steps.scan.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Security audit: known vulnerabilities in dependencies"
+          existing=$(gh issue list --state open --limit 50 --json number,title \
+            --search "in:title \"Security audit\"" \
+            | jq -r --arg t "$title" '.[] | select(.title == $t) | .number' | head -1)
+          {
+            echo "<!-- osv-scanner-audit -->"
+            echo "Daily osv-scanner run on $(date -u '+%Y-%m-%d %H:%M UTC') found known vulnerabilities."
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            cat /tmp/osv-report.md
+            echo
+            echo "---"
+            echo "Fix: merge the matching Dependabot PR when one exists, otherwise bump the pinned version above. This issue updates itself on each daily run and closes when the repo scans clean."
+          } > /tmp/issue-body.md
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file /tmp/issue-body.md
+          else
+            gh issue create --title "$title" --body-file /tmp/issue-body.md
+          fi
+          echo "::error::Known vulnerabilities found - see the Security audit issue."
+          exit 1
+
+      - name: Close audit issue when clean
+        if: steps.scan.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          title="Security audit: known vulnerabilities in dependencies"
+          existing=$(gh issue list --state open --limit 50 --json number,title \
+            --search "in:title \"Security audit\"" \
+            | jq -r --arg t "$title" '.[] | select(.title == $t) | .number' | head -1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Clean scan on $(date -u '+%Y-%m-%d %H:%M UTC') - closing."
+            gh issue close "$existing"
+          fi
