@@ -25,9 +25,25 @@ jobs:
   summary:
     # Skip fork PRs: they get no secrets and a read-only token, so the run
     # would only fail. Summarize them by hand through workflow_dispatch.
+    #
+    # Skip agent-authored PRs: they already carry a full human-written
+    # description, so the AI summary is redundant (and burns OpenRouter
+    # credits). A PR counts as agent-authored when it has any label in the
+    # exclude list below, or its author login is in the author exclude list
+    # (GitHub expressions have no any(), so each excluded label gets its own
+    # contains()). Extend these lists as new agent identities appear.
+    # workflow_dispatch still runs on them as the manual escape hatch when a
+    # summary is wanted anyway.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      (
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        !contains(github.event.pull_request.labels.*.name, 'instinct-agent') &&
+        !contains(github.event.pull_request.labels.*.name, 'ai-agent') &&
+        !contains(github.event.pull_request.labels.*.name, 'mindphaser') &&
+        !contains(github.event.pull_request.labels.*.name, 'mindfazer') &&
+        !contains(fromJSON('["instinct-agent", "instinctagent", "instinct-agent[bot]", "mindphaser", "mindphaser[bot]", "mindfazer"]'), github.event.pull_request.user.login)
+      )
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
