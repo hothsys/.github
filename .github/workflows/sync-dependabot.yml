@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Sync every repo
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_SYNC_PAT }}
