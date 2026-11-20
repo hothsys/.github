@@ -1,0 +1,10 @@
+# Dependabot for the hothsys/.github repo itself. Hand-written: the org
+# sync workflow skips this repo, so this file is not generated from
+# configs/dependabot.template.yml.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

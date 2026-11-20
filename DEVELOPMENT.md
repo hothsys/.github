@@ -62,6 +62,25 @@ Plus a repo-root copy of the matching config from this repo: `configs/ruff.toml`
 
 Multi-stack repos need nothing extra: the workflow runs each linter on the matching files, so a JS frontend and a Python backend are both checked in one PR.
 
-**Dependabot:** settings live in `configs/dependabot.template.yml` here. `sync-dependabot.yml` renders each repo's `.github/dependabot.yml` filtered to the ecosystems that repo actually uses, and opens a PR when a repo drifts. Do not hand-edit a repo's dependabot.yml - edit the template.
+**Dependabot:** settings live in `configs/dependabot.template.yml` here. `sync-dependabot.yml` renders each repo's `.github/dependabot.yml` filtered to the ecosystems that repo actually uses, and opens a PR when a repo drifts. Do not hand-edit a repo's dependabot.yml - edit the template. Manifest ecosystems (pip, npm, maven, gradle) check daily so advisories become fix PRs within a day; `github-actions` checks weekly. Dependabot alerts and security updates are enabled per repo under Settings > Code security and analysis, so known-CVE PRs also fire between version-update runs.
+### 🛡️ 6. Security audit
+
+Every repo runs the org's shared CVE audit daily. It scans every dependency manifest and lockfile with [osv-scanner](https://google.github.io/osv-scanner/) against the OSV.dev database (PyPI, npm, Maven Central, GitHub Actions, ...), opens one `Security audit` issue when it finds known vulnerabilities, keeps that issue updated, and closes it when the repo scans clean.
+
+**Adding it to a repo** takes one workflow file at `.github/workflows/security-audit.yml`:
+
+```yaml
+name: Security Audit
+on:
+  schedule:
+    - cron: 'MM HH * * *'  # daily; stagger the time per repo
+  workflow_dispatch:
+jobs:
+  audit:
+    uses: hothsys/.github/.github/workflows/reusable-security-audit.yml@v2
+    permissions:
+      contents: read
+      issues: write
+```
 
 **README:** new repos start from `docs/README-template.md` (Description, Features, Documentation in `docs/`, License).

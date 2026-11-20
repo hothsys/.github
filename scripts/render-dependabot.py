@@ -17,6 +17,8 @@ from pathlib import Path
 MANIFESTS = {
     "npm": ["package.json"],
     "pip": ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile"],
+    "maven": ["pom.xml"],
+    "gradle": ["build.gradle", "build.gradle.kts"],
     "github-actions": [".github/workflows"],
 }
 
