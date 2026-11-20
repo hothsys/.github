@@ -41,7 +41,8 @@ jobs:
         !contains(github.event.pull_request.labels.*.name, 'instinct-agent') &&
         !contains(github.event.pull_request.labels.*.name, 'ai-agent') &&
         !contains(github.event.pull_request.labels.*.name, 'mindphaser') &&
-        !contains(fromJSON('["instinct-agent", "instinctagent", "instinct-agent[bot]", "mindphaser", "mindphaser[bot]"]), github.event.pull_request.user.login)
+        !contains(github.event.pull_request.labels.*.name, 'mindfazer') &&
+        !contains(fromJSON('["instinct-agent", "instinctagent", "instinct-agent[bot]", "mindphaser", "mindphaser[bot]", "mindfazer"]), github.event.pull_request.user.login)
       )
     runs-on: ubuntu-latest
     permissions:
