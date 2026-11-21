@@ -1,0 +1,16 @@
+name: Security audit regression tests
+on:
+  pull_request:
+    paths:
+      - .github/workflows/reusable-security-audit.yml
+      - .github/workflows/test-security-audit.yml
+      - tests/test_security_audit.py
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m unittest discover -s tests -v

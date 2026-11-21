@@ -33,20 +33,38 @@ jobs:
         shell: bash
         run: |
           set +e
-          /tmp/osv-scanner scan --recursive --format markdown --output /tmp/osv-report.md . > /tmp/osv-log.txt 2>&1
+          /tmp/osv-scanner scan --recursive --format markdown --output-file /tmp/osv-report.md . > /tmp/osv-log.txt 2>&1
           code=$?
           cat /tmp/osv-log.txt
-          # osv-scanner exits 1 when vulnerabilities are found; anything
-          # else above 1 is a scanner error and should fail the job.
-          if [ "$code" -gt 1 ]; then
-            echo "::error::osv-scanner failed with exit code $code"
-            exit "$code"
-          fi
-          echo "found=$([ "$code" -eq 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # OSV-Scanner 2.7.1 reserves 128 for ErrNoPackagesFound.
+          # This is not a clean scan: leave any existing audit issue open.
+          case "$code" in
+            0) status=clean; found=false ;;
+            1) status=findings; found=true ;;
+            128)
+              status=not-applicable; found=unknown
+              echo "::notice::No supported dependency packages were detected; audit not applicable."
+              ;;
+            *)
+              echo "::error::osv-scanner failed with exit code $code"
+              exit "$code"
+              ;;
+          esac
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Dependency security audit"
+            echo
+            echo "Result: $status"
+            if [ "$status" = not-applicable ]; then
+              echo "No supported dependency packages were detected. This is not a clean security scan."
+              echo "Existing vulnerability issues are left open. Unsupported dependencies and application code were not assessed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
       - name: Report findings as an issue
-        if: steps.scan.outputs.found == 'true'
+        if: steps.scan.outputs.status == 'findings'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -75,7 +93,7 @@ jobs:
           exit 1
 
       - name: Close audit issue when clean
-        if: steps.scan.outputs.found == 'false'
+        if: steps.scan.outputs.status == 'clean'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
