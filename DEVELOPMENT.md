@@ -84,3 +84,9 @@ jobs:
 ```
 
 **README:** new repos start from `docs/README-template.md` (Description, Features, Documentation in `docs/`, License).
+
+Audit outcomes are distinct: `clean` (detected dependencies scanned with no findings),
+`findings` (issue updated and run fails), `not-applicable` (OSV-Scanner found no
+supported packages), or a scanner error (run fails). A not-applicable result is
+shown in the job summary and does not close an existing security issue. It is
+not a claim that the application is secure or that all dependencies are covered.
