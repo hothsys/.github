@@ -7,7 +7,7 @@
 -->
 <h1 align="center">Project Name</h1>
 
-One short sentence saying what the project does.
+<p align="center">One short sentence saying what the project does.</p>
 
 One short paragraph on who it is for and what problem it solves. Replace this with the real overview.
 
