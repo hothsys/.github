@@ -1,8 +1,11 @@
 > **Template.** Copy this file to a repo's `README.md` and replace the examples. Anything in `code` style below is an example path to swap for that repo's real file, so it is not a live link here. Delete this note after copying.
 
-<!-- Logo (optional): put this before the project name, using the repo's own logo file:
-<img src="logo.svg" width="100" valign="middle" hspace="10" vspace="4"/> -->
-# Project Name
+<!-- Logo (optional): put this above the project name, centered, using the repo's own logo file:
+<p align="center">
+  <img src="logo.svg" alt="Project logo" width="220">
+</p>
+-->
+<h1 align="center">Project Name</h1>
 
 One short sentence saying what the project does.
 
