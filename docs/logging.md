@@ -19,19 +19,25 @@ Windows paths are deferred until delta's Windows setup is checked (see #22).
 
 ## Line format
 
-One line per entry: timestamp, level, module or area, message, then structured
-fields.
+Each entry starts on its own line: timestamp, level, module or area, message,
+then structured fields. A stack trace, when there is one, follows on indented
+lines.
+
+Timestamps are local time in `YYYY-MM-DD HH:MM:SS` format.
 
 ```text
 2026-11-24 12:00:00 INFO scan: finished path="/photos" files=120 ms=340
 ```
 
-Errors carry their stack trace on the indented lines after the entry.
-
 ## Levels
 
 Levels are `DEBUG`, `INFO`, `WARNING`, `ERROR`. The default is `INFO` everywhere.
-The console shows `INFO` and above; the file also gets `DEBUG`.
+The file gets the configured level. The console never shows below `INFO`, so
+`DEBUG` detail goes to the file only.
+
+Level names map one to one across languages: `WARNING` in Python is `warn` in
+TypeScript, and the other levels match (`DEBUG`/`debug`, `INFO`/`info`,
+`ERROR`/`error`).
 
 The level is set per app, plus an `<APP>_LOG_LEVEL` environment variable that
 overrides the setting. Examples: `LOG_LEVEL` in fotonervic's `app.conf`, and
@@ -61,7 +67,7 @@ stays the same.
 
 | Repo | Status |
 | --- | --- |
-| fotonervic | Conforms. This is the model: OS-standard location, 5 MB rotation keeping 3 backups, `LOG_LEVEL` in `app.conf` with `INFO` as the default, console `INFO`, file `DEBUG`. |
+| fotonervic | Conforms. This is the model: OS-standard location, 5 MB rotation keeping 3 backups, `LOG_LEVEL` in `app.conf` with `INFO` as the default, `INFO` by default, `DEBUG` to the file only when `LOG_LEVEL=DEBUG`. |
 | delta | Conforms. OS-standard location, 5 MB rotation keeping 3 backups, structured one-line entries, level from a setting, `DELTA_LOG_LEVEL`, or a command line flag. |
 | sweepr | Outlier. `sweepr.log` sits in the project folder, rotates at 10 MB keeping 3 backups, and always logs at `DEBUG` with no level setting. |
 | docucloak | Outlier. `server.log` sits in the app folder, rotates at 5 MB keeping 3 backups, and always logs at `DEBUG` with no level setting. |
