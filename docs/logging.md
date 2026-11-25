@@ -67,7 +67,7 @@ stays the same.
 
 | Repo | Status |
 | --- | --- |
-| fotonervic | Conforms. This is the model: OS-standard location, 5 MB rotation keeping 3 backups, `LOG_LEVEL` in `app.conf` with `INFO` as the default, `INFO` by default, `DEBUG` to the file only when `LOG_LEVEL=DEBUG`. |
+| fotonervic | Conforms. This is the model: OS-standard location, 5 MB rotation keeping 3 backups, `LOG_LEVEL` in `app.conf`, `INFO` by default, `DEBUG` to the file only when `LOG_LEVEL=DEBUG`. |
 | delta | Conforms. OS-standard location, 5 MB rotation keeping 3 backups, structured one-line entries, level from a setting, `DELTA_LOG_LEVEL`, or a command line flag. |
 | sweepr | Outlier. `sweepr.log` sits in the project folder, rotates at 10 MB keeping 3 backups, and always logs at `DEBUG` with no level setting. |
 | docucloak | Outlier. `server.log` sits in the app folder, rotates at 5 MB keeping 3 backups, and always logs at `DEBUG` with no level setting. |
