@@ -1,25 +1,31 @@
-# Project Name
+# <img src="logo.svg" width="100" valign="middle" hspace="10" vspace="4"/>Project Name
 
-> One-line description of what this project does.
+One short sentence saying what the project does.
 
-## Description
+One short paragraph on who it is for and what problem it solves. Replace this with the real overview.
 
-A paragraph or two explaining what the project is, the problem it solves,
-and why it exists. Replace this with the real overview.
+## Quick Start
 
-## Features
+Requirements, install and first launch in a few steps. Put platform detail and troubleshooting in [`docs/`](docs/).
 
-- Feature one - short description
-- Feature two - short description
-- Feature three - short description
+1. Install the requirements.
+2. Get the code and install dependencies.
+3. Start the app.
+
+## Screenshots
+
+One to three images with alt text.
+
+![Main window](docs/images/main.png)
 
 ## Documentation
 
 Full documentation lives in the [`docs/`](docs/) folder:
 
-- [Getting Started](docs/getting-started.md)
-- [Usage](docs/usage.md)
-- [API Reference](docs/api.md)
+| Page | What it covers |
+| --- | --- |
+| [Getting Started](docs/getting-started.md) | Platform setup and first run |
+| [Usage](docs/usage.md) | Everyday use |
 
 ## License
 
