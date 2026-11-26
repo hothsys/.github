@@ -26,10 +26,12 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
         run: |
-          if [ -z "$TAG" ] || printf '%s' "$TAG" | grep -q '[[:space:]]'; then
-            echo "tag must be a non-empty name without whitespace" >&2
-            exit 1
-          fi
+          # Only the active major can be moved. v3 gets added here when
+          # that step becomes deliberate.
+          case "$TAG" in
+            v2) ;;
+            *) echo "only the active major can be moved (v2 for now)" >&2; exit 1 ;;
+          esac
 
       - name: Check the tag already exists
         env:
