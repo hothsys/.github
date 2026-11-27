@@ -1,0 +1,70 @@
+name: Move tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to move (must already exist, e.g. v2)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  move-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: move-tag-${{ inputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate the tag input
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          # Only the active major can be moved. v3 gets added here when
+          # that step becomes deliberate.
+          case "$TAG" in
+            v2) ;;
+            *) echo "only the active major can be moved (v2 for now)" >&2; exit 1 ;;
+          esac
+
+      - name: Check the tag already exists
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "tag $TAG does not exist yet, refusing to create it" >&2
+            exit 1
+          fi
+
+      - name: Move the tag
+        id: move
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          current="$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)"
+          if [ "$current" = "$GITHUB_SHA" ]; then
+            echo "Tag $TAG already points at $GITHUB_SHA, nothing to do."
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+          echo "moved=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the tag
+        if: steps.move.outputs.moved == 'true'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          moved="$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)"
+          if [ "$moved" != "$GITHUB_SHA" ]; then
+            echo "tag $TAG did not move to $GITHUB_SHA, got $moved" >&2
+            exit 1
+          fi
+          echo "Tag $TAG now points at $GITHUB_SHA."
