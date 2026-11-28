@@ -20,7 +20,7 @@ name: PR Agent Review (reusable)
 on:
   workflow_call:
     secrets:
-      OPENROUTER_API_KEY:
+      OPENROUTER_PR_AGENT_KEY:
         required: true
 
 jobs:
@@ -63,8 +63,10 @@ jobs:
         uses: the-pr-agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Same OpenRouter key the PR Summary workflow uses.
-          OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Dedicated key: the GitHub PR Review Bot OpenRouter key, kept
+          # separate from the PR Summary key so each app's usage is tracked
+          # on its own. Callers pass it as the OPENROUTER_PR_AGENT_KEY secret.
+          OPENROUTER__KEY: ${{ secrets.OPENROUTER_PR_AGENT_KEY }}
           # Free models only: the openrouter/free router picks an available free
           # model, and the empty fallback list blocks any paid-model fallback.
           CONFIG.MODEL: "openrouter/free"
