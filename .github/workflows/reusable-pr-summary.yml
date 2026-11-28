@@ -39,7 +39,9 @@ jobs:
     # would only fail. Summarize them by hand through workflow_dispatch.
     #
     # Skip agent-authored PRs: they already carry a full human-written
-    # description, so the AI summary is redundant. A PR counts as
+    # description, so the AI summary is redundant. Dependabot PRs are skipped
+    # the same way: the diff and release notes say what changed, so a summary
+    # adds nothing and only spends free-model quota. A PR counts as
     # agent-authored when it has any label in the exclude list below, or its
     # author login is in the author exclude list (GitHub expressions have no
     # any(), so each excluded label gets its own contains()). Extend these
@@ -54,7 +56,7 @@ jobs:
         !contains(github.event.pull_request.labels.*.name, 'ai-agent') &&
         !contains(github.event.pull_request.labels.*.name, 'mindphaser') &&
         !contains(github.event.pull_request.labels.*.name, 'mindfazer') &&
-        !contains(fromJSON('["instinct-agent", "instinctagent", "instinct-agent[bot]", "mindphaser", "mindphaser[bot]", "mindfazer", "VetchTheSpy"]'), github.event.pull_request.user.login)
+        !contains(fromJSON('["instinct-agent", "instinctagent", "instinct-agent[bot]", "mindphaser", "mindphaser[bot]", "mindfazer", "VetchTheSpy", "dependabot[bot]"]'), github.event.pull_request.user.login)
       )
     runs-on: ubuntu-latest
     permissions:
@@ -296,3 +298,4 @@ jobs:
             await (await writeRunSummary(previous ? 'comment updated' : 'comment created'))
               .addLink('View comment', comment.html_url)
               .write();
+
