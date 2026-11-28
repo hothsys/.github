@@ -12,7 +12,9 @@ name: PR Agent Review (reusable)
 # Token-saving skip: when every changed file in a PR is docs or repo config
 # (a README, the docs/ folder, or the .github/ folder), the review step is
 # skipped and no OpenRouter request is made. A PR that mixes code with docs
-# or config is still reviewed in full.
+# or config is still reviewed in full. If the changed-file list itself cannot
+# be retrieved from GitHub, the job fails visibly and no review is attempted
+# (fail-closed: no spend on an unverified file set).
 #
 # Callers use pull_request (not pull_request_target), so GitHub itself
 # withholds secrets and write access from fork PRs, and the job guard below
@@ -50,9 +52,18 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: prNumber, per_page: 100,
-            });
+            // Fail-closed: if the changed-file list cannot be retrieved,
+            // skip the review with a visible failure instead of spending on
+            // an unverified file set.
+            let files;
+            try {
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: prNumber, per_page: 100,
+              });
+            } catch (err) {
+              core.setFailed(`Could not retrieve the changed-file list from GitHub (${err.message}). Skipping AI review per the fail-closed policy; no OpenRouter request was made. Re-run the job to retry.`);
+              return;
+            }
             // A PR is skipped only when EVERY changed file is docs or repo
             // config; mixed code+docs PRs are still reviewed in full.
             const isExcluded = (name) =>
