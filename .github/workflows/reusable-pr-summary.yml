@@ -140,7 +140,10 @@ jobs:
               const headers = {
                 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
                 'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://github.com',
+                // OpenRouter app identity: the referer groups usage into an app on the
+                // OpenRouter dashboard, and X-Title names the app when it is created.
+                // Keep this referer distinct so summaries stay separate from other tools.
+                'HTTP-Referer': 'https://github.com/hothsys/pr-summary',
                 'X-Title': 'GitHub PR Summarizer'
               };
               const baseRequest = {
