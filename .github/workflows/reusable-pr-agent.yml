@@ -17,6 +17,14 @@ name: PR Agent Review (reusable)
 # Callers use pull_request (not pull_request_target), so GitHub itself
 # withholds secrets and write access from fork PRs, and the job guard below
 # skips bot-authored and fork PRs explicitly.
+#
+# Push handling: callers that add synchronize to their pull_request types get
+# an incremental review of just the new commits on each push, closing the gap
+# where a PR opened docs-only and later pushed code was never reviewed. The
+# pinned runner skips merge commits and bot pushes itself, and the persistent
+# review comment updates in place, so repeated pushes never pile up extra
+# comments. The skip gate still short-circuits docs-only pushes before any
+# model call.
 on:
   workflow_call:
     secrets:
@@ -78,3 +86,12 @@ jobs:
           # (security + effort).
           PR_REVIEWER.ENABLE_REVIEW_LABELS_SECURITY: "false"
           PR_REVIEWER.ENABLE_REVIEW_LABELS_EFFORT: "false"
+          # Payload-level ignores mirror the skip gate, so docs/config files
+          # stay out of the model payload in mixed PRs too. The filter anchors
+          # matches at the path start, so the README regex uses .*/ for depth.
+          IGNORE.GLOB: "['docs/*', '.github/*']"
+          IGNORE.REGEX: "['(?i)(^|.*/)readme(\\.[^/]+)?$']"
+          # Incremental review of just the new commits on each push; the
+          # caller must also add synchronize to its pull_request types.
+          GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "true"
+          GITHUB_ACTION_CONFIG.PUSH_COMMANDS: "['/review -i']"
