@@ -1,0 +1,108 @@
+name: PR Agent Review (reusable)
+# Shared AI code review for every repo in the org. Lives in hothsys/.github at
+# .github/workflows/reusable-pr-agent.yml; each repo calls it from a small
+# pr-agent.yml, the same caller pattern as the lint and PR Summary workflows.
+#
+# Review-only (no auto describe/improve) and free OpenRouter models only, to
+# stay within the free-tier request budget shared with the PR Summary
+# workflow. Same model policy as the frayme pilot: the openrouter/free router
+# picks an available free model and the empty fallback list blocks any
+# paid-model fallback.
+#
+# Token-saving skip: when every changed file in a PR is docs or repo config
+# (a README, the docs/ folder, or the .github/ folder), the review step is
+# skipped and no OpenRouter request is made. A PR that mixes code with docs
+# or config is still reviewed in full. If the changed-file list itself cannot
+# be retrieved from GitHub, the job fails visibly and no review is attempted
+# (fail-closed: no spend on an unverified file set).
+#
+# Callers use pull_request (not pull_request_target), so GitHub itself
+# withholds secrets and write access from fork PRs, and the job guard below
+# skips bot-authored and fork PRs explicitly.
+#
+# Push handling: callers that add synchronize to their pull_request types get
+# an incremental review of just the new commits on each push, closing the gap
+# where a PR opened docs-only and later pushed code was never reviewed. The
+# pinned runner skips merge commits and bot pushes itself, and the persistent
+# review comment updates in place, so repeated pushes never pile up extra
+# comments. The skip gate still short-circuits docs-only pushes before any
+# model call.
+on:
+  workflow_call:
+    secrets:
+      OPENROUTER_PR_AGENT_KEY:
+        required: true
+
+jobs:
+  review:
+    # Skip bot-authored PRs (e.g. dependabot) and fork PRs (no secrets,
+    # read-only token); collaborator branches from ordinary user accounts pass.
+    if: ${{ github.event.sender.type != 'Bot' && github.event.pull_request.head.repo.fork == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check for reviewable files
+        id: check
+        # Pinned to a commit (v9.0.0), same as reusable-pr-summary.yml.
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            // Fail-closed: if the changed-file list cannot be retrieved,
+            // skip the review with a visible failure instead of spending on
+            // an unverified file set.
+            let files;
+            try {
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: prNumber, per_page: 100,
+              });
+            } catch (err) {
+              core.setFailed(`Could not retrieve the changed-file list from GitHub (${err.message}). Skipping AI review per the fail-closed policy; no OpenRouter request was made. Re-run the job to retry.`);
+              return;
+            }
+            // A PR is skipped only when EVERY changed file is docs or repo
+            // config; mixed code+docs PRs are still reviewed in full.
+            const isExcluded = (name) =>
+              /(^|\/)readme(\.[^/]+)?$/i.test(name) ||
+              name.startsWith('docs/') ||
+              name.startsWith('.github/');
+            const skipped = files.filter(f => isExcluded(f.filename)).length;
+            const reviewable = files.length > 0 && skipped < files.length;
+            core.info(`${files.length} changed file(s), ${skipped} of them docs/config-only`);
+            core.info(reviewable ? 'PR has reviewable files' : 'Docs/config-only PR, skipping AI review');
+            core.setOutput('reviewable', reviewable ? 'true' : 'false');
+      - name: Run PR-Agent review
+        if: steps.check.outputs.reviewable == 'true'
+        # Pinned to the v0.50.0 commit because this step reads the OpenRouter
+        # secret (same pinning practice as reusable-pr-summary.yml).
+        uses: the-pr-agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Dedicated key: the GitHub PR Review Bot OpenRouter key, kept
+          # separate from the PR Summary key so each app's usage is tracked
+          # on its own. Callers pass it as the OPENROUTER_PR_AGENT_KEY secret.
+          OPENROUTER__KEY: ${{ secrets.OPENROUTER_PR_AGENT_KEY }}
+          # Free models only: the openrouter/free router picks an available free
+          # model, and the empty fallback list blocks any paid-model fallback.
+          CONFIG.MODEL: "openrouter/free"
+          CONFIG.FALLBACK_MODELS: "[]"
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "false"
+          # No labels on agent-authored PRs; disable PR-Agent's review labels
+          # (security + effort).
+          PR_REVIEWER.ENABLE_REVIEW_LABELS_SECURITY: "false"
+          PR_REVIEWER.ENABLE_REVIEW_LABELS_EFFORT: "false"
+          # Payload-level ignores mirror the skip gate, so docs/config files
+          # stay out of the model payload in mixed PRs too. The filter anchors
+          # matches at the path start, so the README regex uses .*/ for depth.
+          IGNORE.GLOB: "['docs/*', '.github/*']"
+          IGNORE.REGEX: "['(?i)(^|.*/)readme(\\.[^/]+)?$']"
+          # Incremental review of just the new commits on each push; the
+          # caller must also add synchronize to its pull_request types.
+          GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "true"
+          GITHUB_ACTION_CONFIG.PUSH_COMMANDS: "['/review -i']"
